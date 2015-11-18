@@ -1,7 +1,5 @@
 var assert = require('assert');
-var ChromeRuntime = require('./chrome.runtime.mock');
-var runtime = new ChromeRuntime();
-var runtimeExt = new ChromeRuntime();
+var runtime = require('./chrome.runtime.mock').runtime;
 
 var log = [];
 // function dumpLog() { console.log(JSON.stringify(log, null, 4)); }
@@ -18,7 +16,6 @@ function createCb(scope) {
 }
 
 var onConnect = createCb('main::onConnect');
-var onConnectExt = createCb('main::onConnectExternal');
 
 function verifyPort(port) {
   assert('object' === typeof(port));
@@ -35,18 +32,15 @@ function verifyPort(port) {
 
 describe('chrome.runtime.mock module', function() {
 
-  beforeEach(function() { log = []; runtime.onConnect.addListener(onConnect); runtimeExt.onConnectExternal.addListener(onConnectExt); });
-  afterEach(function() { runtime.onConnect.removeListener(onConnect); runtimeExt.onConnectExternal.removeListener(onConnectExt); });
+  beforeEach(function() { log = []; runtime.onConnect.addListener(onConnect); });
+  afterEach(function() { runtime.onConnect.removeListener(onConnect); });
 
-  it('should export connect method and onConnect / onConnectExternal events', function() {
+  it('should export connect method and onConnect event', function() {
     assert('object' === typeof(runtime));
     assert('function' === typeof(runtime.connect));
     assert('object' === typeof(runtime.onConnect));
     assert('function' === typeof(runtime.onConnect.addListener));
     assert('function' === typeof(runtime.onConnect.removeListener));
-    assert('object' === typeof(runtime.onConnectExternal));
-    assert('function' === typeof(runtime.onConnectExternal.addListener));
-    assert('function' === typeof(runtime.onConnectExternal.removeListener));
   });
 
   it('connect() should create Port', function(done) {
@@ -64,18 +58,6 @@ describe('chrome.runtime.mock module', function() {
       var port = log[0][1];
       verifyPort(port);
       assert('number' === typeof(port.sender && port.sender.tab && port.sender.tab.id));
-      done();
-    });
-  });
-
-  it('should notify onConnectExternal handler when connect has been called with extension id', function(done) {
-    runtime.connect(runtimeExt.id, { name: 'myPort' });
-    setImmediate(function() {
-      assert(1 === log.length);
-      assert.strictEqual(log[0][0], 'main::onConnectExternal');
-      var port = log[0][1];
-      verifyPort(port);
-      assert.strictEqual(port.sender && port.sender.id, runtime.id);
       done();
     });
   });

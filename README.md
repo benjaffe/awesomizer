@@ -1,3 +1,117 @@
+
+## Features
+
+Night Mode for Google Docs
+
+![Night Mode](gifs/night-mode.gif)
+
+## Install Instructions
+
+Visit the [Awesomizer Plugin Page](about:blank), and click the Install link (upper left, says "FREE"). The Awesomizer will load on pages from now going forward.
+
+## Instructions for Adding Features
+
+You need to do the following to prepare your environment. You should only need to do these steps once:
+
+0. Clone the repo! (in this example, I'm putting the code in ~/Sites, and using the default name, "Awesomizer")
+    
+    ```bash
+    cd ~/Sites
+    git clone "https://github.com/benjaffe/Awesomizer"
+    ```
+    
+1. Install dependencies and run the build task so it starts watching
+
+    ```bash
+    cd Awesomizer
+    npm install
+    ```
+    
+2. Build the plugin
+
+    ```bash
+    grunt
+    ```
+    
+3. Load the plugin in Chrome
+    1. Window - Extensions - Developer Mode - Load unpacked extension
+    2. Choose the folder: ~/Sites/Awesomizer/build/unpacked-dev
+    3. You should see the plugin loaded at the top of the list.
+    4. If you have the normal Awesomizer installed already, scroll down until you find it, and uncheck the checkbox to disable it.
+
+
+
+Now you can start developing! Here's how:
+
+1. In `code/js/background.js`, add an entry to the `defaultFeatures` array at the top, following the pattern below:
+    ```js
+    {
+        // This is the feature's full name
+        name:  'Google Docs Night Mode',
+    
+        // This is the name of the service you affect
+        service:  'Google Docs',
+    	
+        // This serves as the storage key, and the file name for your feature's 
+        // entry point (ex. docsNightMode, which means your main JS file is
+        // named docsNightMode.js).
+        shortName:  'docsNightMode',
+    
+        // This is the description that users see in the wplugin dropdown. It 
+        // should explain what the plugin does. Try to make it clear, but concise.
+        description:  'Night mode for Docs, so your eyes don\'t become bleary from reading docs late into the night.',
+    
+        // This optional string is displayed in a more subdued way than the 
+        // description, and is intended for usage notes for the user.
+        note: '...or perhaps you should go to bed earlier',
+    
+        // This boolean dictates whether the feature is enabled by default when it 
+        // first loads. Users can always change the enabled state from the dropdown 
+        // menu (if they remember that they can).
+        enabled: false,
+    
+        // This object is for storing settings related to your plugin. See 
+        // footnote 0 in this README.
+        settings: {}  
+    }
+    ```
+
+2. In the `code/js/features/` folder, make a copy of the `template` folder.
+   Rename it (and the js file inside) to the short name of your feature (ex. `docsNightMode`).
+   Open the `.js` file, and write your code where it says `//YOUR CODE HERE`. If you have CSS files, uncomment the cssFiles array (in the first few lines of the file), and add any CSS file names (relative paths to the directory of the JS file).
+
+3. Register your plugin code by opening `code/manifest.json` and adding an entry in 
+   the `content_scripts` section. You'll need to specify a URL pattern that the feature should run on, and the JS files that you want to execute. Remember not to specify CSS files here -- those should have been specified above in Step 2.
+   
+4. Build the plugin using the instructions below.
+
+
+### Build instructions:
+
+```bash
+cd ~/Sites/Awesomizer
+grunt start
+```
+
+...and after you run `grunt start` for the first time, it should watch for changes and rebuild automatically
+
+
+
+*Footnote 0: Regarding the settings object: Currently, this object is not guaranteed to work, and handling of it has not been tested at all. In other words, use at your own peril. If your plugin applies to a single website, you can store settings in localStorage instead.*
+
+
+
+
+
+-----------------------------------------------------------------------
+
+### Original README text
+
+Below is the original README text for the skeleton that this plugin is based upon. The information below is potentially out of date or not applicable to this project, so treat it with appropriate caution if you read it.
+
+-----------------------------------------------------------------------
+
+
 ## Skeleton for Google Chrome extensions
 
 * includes awesome messaging module

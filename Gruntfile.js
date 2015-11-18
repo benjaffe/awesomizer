@@ -1,14 +1,14 @@
 module.exports = function(grunt) {
 
-  var pkg = grunt.file.readJSON('package.json');
-  var mnf = grunt.file.readJSON('code/manifest.json');
+  require('time-grunt')(grunt);
+  require('jit-grunt')(grunt);
 
-  var fileMaps = { browserify: {}, uglify: {} };
-  var file, files = grunt.file.expand({cwd:'code/js'}, ['*.js']);
+  var fileMaps = { browserify: {} };
+  var file, files = grunt.file.expand({cwd:'code/js'}, ['*.js', '{,**/}*.js']);
   for (var i = 0; i < files.length; i++) {
     file = files[i];
     fileMaps.browserify['build/unpacked-dev/js/' + file] = 'code/js/' + file;
-    fileMaps.uglify['build/unpacked-prod/js/' + file] = 'build/unpacked-dev/js/' + file;
+    // fileMaps.browserify['build/unpacked-prod/js/' + file] = 'code/js/' + file;
   }
 
   //
@@ -17,17 +17,11 @@ module.exports = function(grunt) {
 
   grunt.initConfig({
 
-    clean: ['build/unpacked-dev', 'build/unpacked-prod', 'build/*.crx'],
+    clean: ['build/unpacked-dev'/*, 'build/unpacked-prod'*/],
 
     mkdir: {
-      unpacked: { options: { create: ['build/unpacked-dev', 'build/unpacked-prod'] } },
+      unpacked: { options: { create: ['build/unpacked-dev'/*, 'build/unpacked-prod'*/] } },
       js: { options: { create: ['build/unpacked-dev/js'] } }
-    },
-
-    jshint: {
-      options: grunt.file.readJSON('lint-options.json'), // see http://www.jshint.com/docs/options/
-      all: { src: ['package.json', 'lint-options.json', 'Gruntfile.js', 'code/**/*.js',
-                   'code/**/*.json', '!code/js/libs/*'] }
     },
 
     mochaTest: {
@@ -39,51 +33,77 @@ module.exports = function(grunt) {
       main: { files: [ {
         expand: true,
         cwd: 'code/',
-        src: ['**', '!js/**', '!**/*.md'],
+        src: ['**', '!**/*.js', '!**/*.md'],
         dest: 'build/unpacked-dev/'
-      } ] },
-      prod: { files: [ {
-        expand: true,
-        cwd: 'build/unpacked-dev/',
-        src: ['**', '!js/*.js'],
-        dest: 'build/unpacked-prod/'
-      } ] },
-      artifact: { files: [ {
-        expand: true,
-        cwd: 'build/',
-        src: [pkg.name + '-' + pkg.version + '.crx'],
-        dest: process.env.CIRCLE_ARTIFACTS
       } ] }
     },
 
     browserify: {
-      build: {
+      all : {
         files: fileMaps.browserify,
-        options: { browserifyOptions: {
-          debug: true,  // for source maps
-          standalone: pkg['export-symbol']
-        } }
+        options : {
+          // keepAlive : true, // watchify will exit unless task is kept alive
+          watch : true // use watchify for incremental builds!
+          // browserifyOptions : {
+          //   debug : true // source mapping
+          // }
+        }
       }
-    },
-
-    exec: {
-      crx: {
-        cmd: [
-          './crxmake.sh build/unpacked-prod ./mykey.pem',
-          'mv -v ./unpacked-prod.crx build/' + pkg.name + '-' + pkg.version + '.crx'
-        ].join(' && ')
-      }
-    },
-
-    uglify: {
-      min: { files: fileMaps.uglify }
     },
 
     watch: {
-      js: {
-        files: ['package.json', 'lint-options.json', 'Gruntfile.js', 'code/**/*.js',
-                'code/**/*.json', '!code/js/libs/*'],
-        tasks: ['test']
+      css: {
+        files: ['code/**', '!**/*.js'],
+        tasks: ['copy']
+      },
+      dev: {
+        files: ['build/unpacked-dev/**'],
+        tasks: ['chrome_extension_reload', 'beep']
+      }
+    },
+
+    /**
+      Executes "chrome-cli list tabs", grabs stdout, and finds open extension tabs ID's.
+      Sets variable chromeExtensionTabId to the first extension tab ID
+    */
+    external_daemon: {
+      getExtensionTabId: {
+        options: {
+          // verbose: true,
+          startCheck: function(stdout, stderr) {
+            if (!stdout) return false;
+
+            // Find any open tab in Chrome that has the extensions page loaded, grab ID of tab
+            var extensionTabMatches = stdout.match(/\:\d{1,5}\] Extensions/);
+
+            if(extensionTabMatches){
+
+              chromeExtensionTabId = extensionTabMatches[0].substr(1).split(']')[0];
+
+              grunt.log.writeln("Refreshing Chrome Extension Tab #: " + chromeExtensionTabId);
+              grunt.task.run(['exec:reloadChromeTab:'+chromeExtensionTabId]);
+            } else {
+              grunt.log.writeln("No Open Chrome Extension Tab -- Opening One!");
+              grunt.task.run(['exec:reloadChromeTab']);
+            }
+
+            return true;
+          }
+        },
+        cmd: "chrome-cli",
+        args: ["list", "tabs"]
+      }
+    },
+
+    /**
+      Reloads tab in chrome with id of chromeExtensionTabId
+      Called after correct tab number is found from chrome-cli binary.
+    */
+    exec: {
+      reloadChromeTab: {
+        cmd: function(index) {
+          return index ? "chrome-cli reload -t " + index : "chrome-cli open chrome://extensions && chrome-cli reload";
+        }
       }
     }
 
@@ -91,51 +111,40 @@ module.exports = function(grunt) {
 
   grunt.loadNpmTasks('grunt-contrib-clean');
   grunt.loadNpmTasks('grunt-mkdir');
-  grunt.loadNpmTasks('grunt-contrib-jshint');
-  grunt.loadNpmTasks('grunt-mocha-test');
+  // grunt.loadNpmTasks('grunt-contrib-jshint');
+  // grunt.loadNpmTasks('grunt-mocha-test');
   grunt.loadNpmTasks('grunt-contrib-copy');
+  grunt.loadNpmTasks('grunt-watchify');
   grunt.loadNpmTasks('grunt-browserify');
   grunt.loadNpmTasks('grunt-exec');
-  grunt.loadNpmTasks('grunt-contrib-uglify');
+  // grunt.loadNpmTasks('grunt-contrib-uglify');
   grunt.loadNpmTasks('grunt-contrib-watch');
+  grunt.loadNpmTasks('grunt-external-daemon');
+  grunt.loadNpmTasks('grunt-beep');
+
 
   //
   // custom tasks
   //
 
-  grunt.registerTask(
-    'manifest', 'Extend manifest.json with extra fields from package.json',
-    function() {
-      var fields = ['name', 'version', 'description'];
-      for (var i = 0; i < fields.length; i++) {
-        var field = fields[i];
-        mnf[field] = pkg[field];
-      }
-      grunt.file.write('build/unpacked-dev/manifest.json', JSON.stringify(mnf, null, 4) + '\n');
-      grunt.log.ok('manifest.json generated');
-    }
-  );
-
-  grunt.registerTask(
-    'circleci', 'Store built extension as CircleCI arfitact',
-    function() {
-      if (process.env.CIRCLE_ARTIFACTS) { grunt.task.run('copy:artifact'); }
-      else { grunt.log.ok('Not on CircleCI, skipped'); }
-    }
-  );
-
   //
   // testing-related tasks
   //
 
-  grunt.registerTask('test', ['jshint', 'mochaTest']);
-  grunt.registerTask('test-cont', ['test', 'watch']);
+  // grunt.registerTask('test', ['jshint', 'mochaTest']);
+  // grunt.registerTask('test-cont', ['test', 'watch']);
 
   //
   // DEFAULT
   //
 
-  grunt.registerTask('default', ['clean', 'test', 'mkdir:unpacked', 'copy:main', 'manifest',
-    'mkdir:js', 'browserify', 'copy:prod', 'uglify', 'exec', 'circleci']);
+  grunt.registerTask('chrome_extension_reload', function() {
+    grunt.task.run(['external_daemon:getExtensionTabId']);
+  });
 
+
+  grunt.registerTask('default', ['clean', 'mkdir:unpacked', 'copy:main',
+    'mkdir:js', 'browserify', 'chrome_extension_reload']);
+
+  grunt.registerTask('start', ['browserify', 'chrome_extension_reload', 'beep', 'watch']);
 };

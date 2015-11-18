@@ -1,0 +1,23 @@
+.nightmode ::-webkit-scrollbar-track {
+    background-color: #444;
+}
+
+.nightmode ::-webkit-scrollbar-thumb {
+    background-color: #aaa;
+}
+
+.nightmode .kix-appview-editor {
+  background-color: #333;
+}
+
+.nightmode .kix-page, .kix-page-content-wrapper {
+  background: #ccc!important;
+}
+
+.nightmode .docos-anchoreddocoview .docos-replyview-first.docos-anchoredreplyview {
+  background: #ddd;
+}
+
+.nightmode .docos-anchoreddocoview .docos-anchoredreplyview {
+  background: #ccc;
+}

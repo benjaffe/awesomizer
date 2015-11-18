@@ -11,9 +11,10 @@
   // rest of the extension via messaging system (you want to know when new
   // instance of given context is created / destroyed, or you want to be able to
   // issue command requests from this context), you may simply omit the
-  // `handlers` parameter for good when invoking msg.init()
+  // `hadnlers` parameter for good when invoking msg.init()
   var handlers = require('./modules/handlers').create('ct');
-  require('./modules/msg').init('ct', handlers);
+  var msg = require('./modules/msg').init('ct', handlers);
 
   console.log('jQuery version:', $().jquery);
+
 })();

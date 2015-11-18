@@ -16,5 +16,56 @@
   var form = require('./modules/form');
   var runner = require('./modules/runner');
 
-  form.init(runner.go.bind(runner, msg));
+  var $ = require('./libs/jquery');
+
+//   msg.bcast(/* ['ct'], */ 'ping', 'foo _true', function(responses) {
+// //     console.log(responses);  // --->  ['pong','pong',...]
+//   });
+
+  //msg.bcast(/* ['ct'], */ 'setSettings', function(responses) {
+//     console.log(responses);  // --->  ['pong','pong',...]
+  //});
+  var features;
+  var view = {
+    render: function() {
+      console.log('view rendering');
+      $('#settings-list').html();
+      msg.bcast(/* ['ct'], */ 'getSettings', function(responses) {
+        console.log('just got settings')
+        features = responses[0];
+        console.log(features);
+
+        features.forEach(function(feature){
+          console.log(feature);
+          var fdis = (feature.enabled) ? '' : 'feature-disabled';
+          var elem = $('<li id="feature-'+feature.shortName+'" class="feature ' + fdis + '">'+
+              '<h3 class="title">'+
+                '<span class="feature-name">'+feature.name+'</span>'+
+                '<span class="feature-service"> for '+feature.service+'</span></h3>'+
+              '<p class="description">'+feature.description+'</p>'+
+              (feature.note ? '<div class="note">'+feature.note+'</div>' : '')+
+            '</li>');
+
+          elem.click(function(e){
+            var currentlyEnabled = !$(this).hasClass('feature-disabled');
+            console.log($(this),currentlyEnabled);
+            $(this).toggleClass('feature-disabled');
+
+            msg.bcast(/* ['ct'], */ 'setSetting', feature.shortName, !currentlyEnabled, function(responses) {
+              // features = responses[0];
+            });
+          });
+
+          $('#settings-list').append(elem);
+          console.log($('#settings-list'), elem);
+        });
+      });
+    }
+  };
+
+  $(function(){
+    view.render();
+  });
+  //form.init(runner.go.bind(runner, msg));
+
 })();

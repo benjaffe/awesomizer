@@ -248,10 +248,6 @@ function Messaging() {
   // type: (chrome.runtime) Port
   this.port = null;
 
-  // map of ports for connected extensions
-  // key = extension id, value = port
-  this.extPorts = {};
-
   // callback lookup table: if request waits for response, this table holds
   // the callback function that will be invoke upon response
   // format:
@@ -333,6 +329,7 @@ Messaging.prototype.selectTargets = function(fromBg, targTabId, targCategories, 
 
 // message handler (useb by both background and non-backound)
 Messaging.prototype.onCustomMsg = function(message) {
+
   var _port, _arr, _localHandler, _ref, i;
 
   // helper functions:
@@ -353,24 +350,18 @@ Messaging.prototype.onCustomMsg = function(message) {
   // create callback waiting for N results, then send response (background):
   function createCbForMoreResults(N) {
     var results = [];
-    var myId = this.runtime.id;
     return function(result, resultValid) {
       if (resultValid !== false) {  // can be either `true` or `undefined`
         results.push(result);
       }
       N--;
-      if (!N && message.sendResponse && ((_port = this.extPorts[message.extensionId]) ||
-        (this.portMap[message.category] && (_port = this.portMap[message.category][message.portId])))) {
-        var response = {
+      if (!N && message.sendResponse && this.portMap[message.category] &&
+          (_port = this.portMap[message.category][message.portId])) {
+        _port.port.postMessage({
           cmd: 'response',
           reqId: message.reqId,
           result: message.broadcast ? results : results[0]
-        };
-
-        if (message.extensionId) {
-          response.extensionId = myId;
-        }
-        _port.port.postMessage(response);
+        });
       }
     }.bind(this);
   }
@@ -399,18 +390,14 @@ Messaging.prototype.onCustomMsg = function(message) {
       }
       if (!responsesNeeded) {
         // no one to answer that now
-        if (message.sendResponse && ((_port = this.extPorts[message.extensionId]) ||
-          (this.portMap[message.category] && (_port = this.portMap[message.category][message.portId])))) {
-          var response = {
+        if (message.sendResponse && this.portMap[message.category] &&
+            (_port = this.portMap[message.category][message.portId])) {
+          _port.port.postMessage({
             cmd: 'response',
             reqId: message.reqId,
             resultValid: false,
             result: message.broadcast ? [] : undefined
-          };
-          if (message.extensionId) {
-            response.extensionId = this.runtime.id;
-          }
-          _port.port.postMessage(response);
+          });
         }
       } else {
         // some responses needed
@@ -437,8 +424,7 @@ Messaging.prototype.onCustomMsg = function(message) {
         }
       }
     } else if ('response' === message.cmd) {
-      var id = message.portId || message.extensionId;
-      _arr = this.pendingReqs[id];  // warning: IE creates a copy here!
+      _arr = this.pendingReqs[message.portId];
       if (_arr) {
         // some results from given port expected, find the callback for reqId
         i = 0;
@@ -446,9 +432,9 @@ Messaging.prototype.onCustomMsg = function(message) {
         if (i < _arr.length) {
           // callback found
           _arr[i].cb(message.result, message.resultValid);
-          this.pendingReqs[id].splice(i, 1);   // need to use orig array (IE problem)
-          if (!this.pendingReqs[id].length) {  // ... same here
-            delete this.pendingReqs[id];
+          _arr.splice(i, 1);
+          if (!_arr.length) {
+            delete this.pendingReqs[message.portId];
           }
         }
       }
@@ -495,38 +481,6 @@ Messaging.prototype.closePendingReqs = function(portId) {
     }
     delete this.pendingReqs[portId];
   }
-};
-
-Messaging.prototype.registerExternalConnection = function(extensionId, port) {
-  this.extPorts[extensionId] = { port: port };
-
-  var _onCustomMsg, _onDisconnect;
-
-  // on disconnect: remove listeners and delete from port map
-  function onDisconnect() {
-    // listeners:
-    port.onDisconnect.removeListener(_onDisconnect);
-    port.onMessage.removeListener(_onCustomMsg);
-    delete this.extPorts[extensionId];
-    // close all pending requests:
-    this.closePendingReqs(extensionId);
-    // invoke custom onDisconnect handler
-    if ('function' === typeof(this.handlers.onExtensionDisconnect)) { this.handlers.onExtensionDisconnect(extensionId); }
-  }
-
-  // install port handlers
-  port.onMessage.addListener(_onCustomMsg = this.onCustomMsg.bind(this));
-  port.onDisconnect.addListener(_onDisconnect = onDisconnect.bind(this));
-  // invoke custom onConnect handler
-  if ('function' === typeof(this.handlers.onExtensionConnect)) { this.handlers.onExtensionConnect(extensionId); }
-};
-
-Messaging.prototype.onConnectExternal = function(port) {
-  if (this.extPorts[port.sender.id]) {
-    return;
-  }
-
-  this.registerExternalConnection(port.sender.id, port);
 };
 
 // backround onConnect handler
@@ -725,55 +679,6 @@ Messaging.prototype.createMsgObject = function(myContextName) {
     }.bind(this);
   }
 
-  function createCmdExtFn() {
-    return function _msg(extensionId, commandName) {
-      // process arguments:
-      if (arguments.length < 2) {
-        // at least extension id and command name must be provided
-        return false;
-      }
-
-      if (this.id !== 'bg') {
-        return false; // only background can send messagess to another extensions
-      }
-
-      var args = Array.prototype.slice.call(arguments, 2);
-      var callback;
-      if (typeof(args[args.length - 1]) === 'function') {
-        callback = args.pop();
-      }
-
-      var _port = this.extPorts[extensionId];
-      if (!_port) {
-        // no one to respond, invoke the callback (if provided) right away
-        if (callback) { callback(); }
-
-        return true;
-      }
-
-      _port.port.postMessage({
-        cmd: 'request',
-        cmdName: commandName,
-        sendResponse: true,
-        args: args,
-        reqId: this.requestId,
-        extensionId: this.runtime.id
-      });
-
-      var _arr = this.pendingReqs[extensionId] || [];
-      _arr.push({id: this.requestId,
-        cb: function(result/*, resultValid/**/) { // ignore 'resultValid' because it is not applicable here
-          if (callback) { callback(result); }
-        }
-      });
-      this.pendingReqs[extensionId] = _arr;
-      this.requestId++;
-
-      // everything went OK
-      return true;
-    }.bind(this);
-  }
-
   // returned object:
   var res = {
     cmd: createFn.call(this, false),
@@ -791,16 +696,6 @@ Messaging.prototype.createMsgObject = function(myContextName) {
       for (var i = 0; i < arguments.length; i++) { args.push(arguments[i]); }
       return res.cmd.apply(res, args);
     };
-  }
-  else {
-    res.connectExt = function(id) {
-      if (this.extPorts[id]) { // already connected
-        return true;
-      }
-      var port = this.runtime.connect(id);
-      this.registerExternalConnection(id, port);
-    }.bind(this);
-    res.cmdExt = createCmdExtFn.call(this);
   }
 
   return res;
@@ -853,7 +748,6 @@ Messaging.prototype.init = function(context, handlers) {
     // background
     this.id = 'bg';
     this.runtime.onConnect.addListener(this.onConnect.bind(this));
-    this.runtime.onConnectExternal.addListener(this.onConnectExternal.bind(this));
   } else {
     // anything else than background
     this.port = this.runtime.connect({ name: context });
